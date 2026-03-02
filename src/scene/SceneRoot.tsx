@@ -1,28 +1,40 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
-import { Perf } from 'r3f-perf';
+import { OrbitControls, Environment } from '@react-three/drei';
 import { Product } from './Product';
 import { InstancedDetails } from './InstancedDetails';
 import { useConfiguratorStore } from '../state/store';
 
-// Lazy-loaded environment preset — demonstrates production lazy loading
-const LazyEnvironment = lazy(() =>
-  import('@react-three/drei').then((mod) => ({
-    default: () => <mod.Environment preset="warehouse" background={false} />,
-  }))
-);
+/**
+ * Lazy-load r3f-perf to demonstrate lazy loading pattern
+ * and avoid potential compatibility issues at startup.
+ */
+function PerfMonitor() {
+  const [PerfComponent, setPerfComponent] = useState<React.ComponentType<{
+    position: string;
+  }> | null>(null);
+
+  useEffect(() => {
+    import('r3f-perf').then((mod) => {
+      setPerfComponent(() => mod.Perf);
+    }).catch(() => {
+      console.warn('r3f-perf failed to load');
+    });
+  }, []);
+
+  if (!PerfComponent) return null;
+  return <PerfComponent position="top-left" />;
+}
 
 /**
  * SceneRoot — the main 3D canvas and scene graph.
  *
  * Architecture:
- * - Canvas with linear tone mapping for accurate PBR
+ * - Canvas with PBR-ready settings
  * - Damped OrbitControls for smooth camera
- * - HDR environment for realistic reflections
+ * - HDR environment for realistic reflections (lazy via Suspense)
  * - Directional key light with shadows
- * - ContactShadows for grounded feel
- * - r3f-perf overlay (toggleable)
+ * - r3f-perf overlay (toggleable, lazy loaded)
  */
 export function SceneRoot() {
   const showPerf = useConfiguratorStore((s) => s.showPerf);
@@ -41,14 +53,14 @@ export function SceneRoot() {
       onPointerMissed={() => setSelectedMesh(null)}
       style={{ background: '#1a1a1a' }}
     >
-      {/* Performance overlay */}
-      {showPerf && <Perf position="top-left" />}
+      {/* Performance overlay — lazy loaded */}
+      {showPerf && <PerfMonitor />}
 
       {/* Lighting */}
-      <ambientLight intensity={0.3} />
+      <ambientLight intensity={0.4} />
       <directionalLight
         position={[5, 8, 5]}
-        intensity={1.2}
+        intensity={1.5}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -58,11 +70,11 @@ export function SceneRoot() {
         shadow-camera-top={5}
         shadow-camera-bottom={-5}
       />
-      <directionalLight position={[-3, 4, -3]} intensity={0.4} />
+      <directionalLight position={[-3, 4, -3]} intensity={0.5} />
 
-      {/* Environment (lazy loaded) */}
-      <Suspense fallback={<Environment preset="city" background={false} />}>
-        <LazyEnvironment />
+      {/* Environment for reflections — lazy loaded via Suspense */}
+      <Suspense fallback={null}>
+        <Environment preset="warehouse" background={false} />
       </Suspense>
 
       {/* Ground plane */}
@@ -70,15 +82,6 @@ export function SceneRoot() {
         <planeGeometry args={[20, 20]} />
         <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
       </mesh>
-
-      {/* Contact shadows for grounded feel */}
-      <ContactShadows
-        position={[0, -0.99, 0]}
-        opacity={0.6}
-        scale={10}
-        blur={2}
-        far={4}
-      />
 
       {/* Product assembly */}
       <Product />
